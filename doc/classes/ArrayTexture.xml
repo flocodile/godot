@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="ArrayTexture" inherits="Texture2D" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+	<brief_description>
+		A texture that displays one layer of a 2D texture array.
+	</brief_description>
+	<description>
+		A [Texture2D] resource that displays the selected [member layer] of a [member texture_array]. Multiple [ArrayTexture] resources can reference layers of the same 2D texture array without duplicating its texture data or mipmaps.
+		[b]Note:[/b] [ArrayTexture] is supported by the Forward+ and Mobile rendering methods. The Compatibility rendering method displays a placeholder instead.
+	</description>
+	<tutorials>
+	</tutorials>
+	<members>
+		<member name="layer" type="int" setter="set_layer" getter="get_layer" default="0">
+			The zero-based index of the layer to display. If the index is outside the range of the [member texture_array], a placeholder is displayed until the array contains that layer.
+		</member>
+		<member name="texture_array" type="TextureLayered" setter="set_texture_array" getter="get_texture_array">
+			The 2D texture array containing the selected [member layer]. Can be a [Texture2DArray], [CompressedTexture2DArray], or [Texture2DArrayRD]. Cubemaps and cubemap arrays are not supported.
+		</member>
+	</members>
+</class>

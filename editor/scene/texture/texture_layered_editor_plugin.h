@@ -51,6 +51,7 @@ class TextureLayeredEditor : public Control {
 	Label *info = nullptr;
 	Button *info_toggle = nullptr;
 	Ref<TextureLayered> texture;
+	Ref<ArrayTexture> array_texture;
 
 	static inline Ref<Shader> shaders[3];
 	Ref<ShaderMaterial> materials[3];
@@ -78,6 +79,7 @@ class TextureLayeredEditor : public Control {
 	}
 
 	void _texture_changed();
+	void _array_texture_changed();
 
 	void _texture_rect_update_area();
 	void _texture_rect_draw();

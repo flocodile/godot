@@ -30,9 +30,97 @@
 
 #include "texture.h"
 
+#include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "scene/resources/placeholder_textures.h"
 #include "servers/rendering/rendering_server.h"
+
+void ArrayTexture::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("set_texture_array", "texture_array"), &ArrayTexture::set_texture_array);
+	ClassDB::bind_method(D_METHOD("get_texture_array"), &ArrayTexture::get_texture_array);
+	ClassDB::bind_method(D_METHOD("set_layer", "layer"), &ArrayTexture::set_layer);
+	ClassDB::bind_method(D_METHOD("get_layer"), &ArrayTexture::get_layer);
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "texture_array", PROPERTY_HINT_RESOURCE_TYPE, "Texture2DArray,CompressedTexture2DArray,PlaceholderTexture2DArray,Texture2DArrayRD"), "set_texture_array", "get_texture_array");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "layer", PROPERTY_HINT_RANGE, "0,2047,1,or_greater"), "set_layer", "get_layer");
+}
+
+void ArrayTexture::set_texture_array(const Ref<TextureLayered> &p_array) {
+	ERR_FAIL_COND(p_array.is_valid() && p_array->get_layered_type() != TextureLayered::LAYERED_TYPE_2D_ARRAY);
+	if (texture_array == p_array) {
+		return;
+	}
+	if (texture_array.is_valid()) {
+		texture_array->disconnect_changed(callable_mp((Resource *)this, &ArrayTexture::emit_changed));
+	}
+	texture_array = p_array;
+	if (texture_array.is_valid()) {
+		texture_array->connect_changed(callable_mp((Resource *)this, &ArrayTexture::emit_changed));
+	}
+	if (texture.is_valid()) {
+		RS::get_singleton()->texture_layer_view_update(texture, texture_array.is_valid() ? texture_array->get_rid() : RID(), layer);
+	}
+	emit_changed();
+}
+
+Ref<TextureLayered> ArrayTexture::get_texture_array() const {
+	return texture_array;
+}
+
+void ArrayTexture::set_layer(int p_layer) {
+	ERR_FAIL_COND(p_layer < 0);
+	if (layer == p_layer) {
+		return;
+	}
+	layer = p_layer;
+	if (texture.is_valid()) {
+		RS::get_singleton()->texture_layer_view_update(texture, texture_array.is_valid() ? texture_array->get_rid() : RID(), layer);
+	}
+	emit_changed();
+}
+
+int ArrayTexture::get_layer() const {
+	return layer;
+}
+
+int ArrayTexture::get_width() const {
+	return texture_array.is_valid() ? MAX(1, texture_array->get_width()) : 1;
+}
+
+int ArrayTexture::get_height() const {
+	return texture_array.is_valid() ? MAX(1, texture_array->get_height()) : 1;
+}
+
+Image::Format ArrayTexture::get_format() const {
+	return texture_array.is_valid() ? texture_array->get_format() : Image::FORMAT_MAX;
+}
+
+bool ArrayTexture::has_mipmaps() const {
+	return texture_array.is_valid() && texture_array->has_mipmaps();
+}
+
+int ArrayTexture::get_mipmap_count() const {
+	return texture_array.is_valid() ? texture_array->get_mipmap_count() : 0;
+}
+
+Ref<Image> ArrayTexture::get_image() const {
+	if (texture_array.is_null() || layer >= texture_array->get_layers()) {
+		return Ref<Image>();
+	}
+	return texture_array->get_layer_data(layer);
+}
+
+RID ArrayTexture::get_rid() const {
+	if (texture.is_null()) {
+		texture = RS::get_singleton()->texture_layer_view_create(texture_array.is_valid() ? texture_array->get_rid() : RID(), layer);
+	}
+	return texture;
+}
+
+ArrayTexture::~ArrayTexture() {
+	if (texture.is_valid() && RS::get_singleton()) {
+		RS::get_singleton()->free_rid(texture);
+	}
+}
 
 Ref<Image> Texture2D::get_image() const {
 	Ref<Image> ret;
@@ -263,6 +351,10 @@ bool TextureLayered::has_mipmaps() const {
 	bool ret = false;
 	GDVIRTUAL_CALL(_has_mipmaps, ret);
 	return ret;
+}
+
+int TextureLayered::get_mipmap_count() const {
+	return has_mipmaps() ? Image::get_image_required_mipmaps(get_width(), get_height(), get_format()) : 0;
 }
 
 Ref<Image> TextureLayered::get_layer_data(int p_layer) const {

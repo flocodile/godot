@@ -964,6 +964,7 @@ void register_scene_types() {
 	GDREGISTER_CLASS(PortableCompressedTexture2D);
 	GDREGISTER_CLASS(ImageTexture);
 	GDREGISTER_CLASS(AtlasTexture);
+	GDREGISTER_CLASS(ArrayTexture);
 	GDREGISTER_CLASS(MeshTexture);
 	GDREGISTER_CLASS(CurveTexture);
 	GDREGISTER_CLASS(CurveXYZTexture);

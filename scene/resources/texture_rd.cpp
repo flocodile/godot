@@ -165,6 +165,10 @@ bool TextureLayeredRD::has_mipmaps() const {
 	return mipmaps > 1;
 }
 
+int TextureLayeredRD::get_mipmap_count() const {
+	return mipmaps > 0 ? int(mipmaps) - 1 : 0;
+}
+
 RID TextureLayeredRD::get_rid() const {
 	if (texture_rid.is_null()) {
 		// We are in trouble, create something temporary.

@@ -32,6 +32,7 @@
 
 #include "core/object/callable_mp.h"
 #include "editor/editor_string_names.h"
+#include "editor/inspector/editor_properties.h"
 #include "editor/scene/texture/color_channel_selector.h"
 #include "editor/themes/editor_scale.h"
 #include "scene/gui/aspect_ratio_container.h"
@@ -376,6 +377,7 @@ bool EditorInspectorPluginTexture::can_handle(Object *p_object) {
 	}
 
 	if (Object::cast_to<Image>(p_object) != nullptr ||
+			Object::cast_to<ArrayTexture>(p_object) != nullptr ||
 			Object::cast_to<ImageTexture>(p_object) != nullptr ||
 			Object::cast_to<AtlasTexture>(p_object) != nullptr ||
 			Object::cast_to<CompressedTexture2D>(p_object) != nullptr ||
@@ -396,6 +398,16 @@ bool EditorInspectorPluginTexture::can_handle(Object *p_object) {
 	if (texture_2d.is_valid()) {
 		this_image = texture_2d->get_image();
 		return this_image.is_valid();
+	}
+	return false;
+}
+
+bool EditorInspectorPluginTexture::parse_property(Object *p_object, const Variant::Type p_type, const String &p_path, const PropertyHint p_hint, const String &p_hint_text, const BitField<PropertyUsageFlags> p_usage, const bool p_wide) {
+	if (Object::cast_to<ArrayTexture>(p_object) && p_path == "texture_array") {
+		EditorProperty *property = EditorInspectorDefaultPlugin::get_editor_for_property(p_object, p_type, p_path, p_hint, p_hint_text, p_usage, p_wide);
+		ERR_FAIL_NULL_V(property, false);
+		add_property_editor(p_path, property, false, TTR("Texture 2D Array"));
+		return true;
 	}
 	return false;
 }

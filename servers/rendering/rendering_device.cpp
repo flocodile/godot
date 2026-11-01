@@ -1956,7 +1956,7 @@ RID RenderingDevice::texture_create_from_extension(TextureType p_type, DataForma
 	return id;
 }
 
-RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view, RID p_with_texture, uint32_t p_layer, uint32_t p_mipmap, uint32_t p_mipmaps, TextureSliceType p_slice_type, uint32_t p_layers) {
+RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view, RID p_with_texture, uint32_t p_layer, uint32_t p_mipmap, uint32_t p_mipmaps, TextureSliceType p_slice_type, uint32_t p_layers, bool p_allow_fallback) {
 	Texture *src_texture = texture_owner.get_or_null(p_with_texture);
 	ERR_FAIL_NULL_V(src_texture, RID());
 
@@ -2022,6 +2022,7 @@ RID RenderingDevice::texture_create_shared_from_slice(const TextureView &p_view,
 		tv.format = p_view.format_override;
 		create_shared = driver->texture_can_make_shared_with_format(texture.driver_id, p_view.format_override, raw_reintepretation);
 	}
+	ERR_FAIL_COND_V_MSG(!create_shared && !p_allow_fallback, RID(), "Texture slice format requires an unsupported copy fallback.");
 
 	tv.swizzle_r = p_view.swizzle_r;
 	tv.swizzle_g = p_view.swizzle_g;
@@ -2968,6 +2969,13 @@ bool RenderingDevice::texture_is_shared(RID p_texture) {
 	Texture *tex = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL_V(tex, false);
 	return tex->owner.is_valid();
+}
+
+bool RenderingDevice::texture_has_shared_fallback(RID p_texture) {
+	ERR_RENDER_THREAD_GUARD_V(true);
+	Texture *tex = texture_owner.get_or_null(p_texture);
+	ERR_FAIL_NULL_V(tex, true);
+	return tex->shared_fallback && tex->shared_fallback->texture.id != 0;
 }
 
 bool RenderingDevice::texture_is_valid(RID p_texture) {

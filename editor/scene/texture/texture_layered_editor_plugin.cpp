@@ -254,6 +254,26 @@ void TextureLayeredEditor::_update_gui() {
 
 void TextureLayeredEditor::_notification(int p_what) {
 	switch (p_what) {
+		case NOTIFICATION_ENTER_TREE: {
+			for (Node *parent = get_parent(); parent; parent = parent->get_parent()) {
+				EditorProperty *property = Object::cast_to<EditorProperty>(parent);
+				if (property && property->get_edited_property() == "texture_array") {
+					ArrayTexture *owner = Object::cast_to<ArrayTexture>(property->get_edited_object());
+					if (owner && owner->get_texture_array() == texture) {
+						array_texture = Ref<ArrayTexture>(owner);
+						array_texture->connect_changed(callable_mp(this, &TextureLayeredEditor::_array_texture_changed));
+						_array_texture_changed();
+						break;
+					}
+				}
+			}
+		} break;
+		case NOTIFICATION_EXIT_TREE: {
+			if (array_texture.is_valid()) {
+				array_texture->disconnect_changed(callable_mp(this, &TextureLayeredEditor::_array_texture_changed));
+				array_texture.unref();
+			}
+		} break;
 		case NOTIFICATION_RESIZED: {
 			_texture_rect_update_area();
 		} break;
@@ -274,6 +294,14 @@ void TextureLayeredEditor::_notification(int p_what) {
 			}
 			theme_cache.outline_color = get_theme_color(SNAME("extra_border_color_1"), EditorStringName(Editor));
 		} break;
+	}
+}
+
+void TextureLayeredEditor::_array_texture_changed() {
+	if (array_texture.is_valid() && array_texture->get_texture_array() == texture) {
+		layer->set_value_no_signal(array_texture->get_layer());
+		_update_material(false);
+		texture_rect->queue_redraw();
 	}
 }
 

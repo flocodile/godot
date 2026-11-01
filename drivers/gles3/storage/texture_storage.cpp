@@ -1227,6 +1227,14 @@ void TextureStorage::texture_proxy_initialize(RID p_texture, RID p_base) {
 	texture_owner.initialize_rid(p_texture, proxy_tex);
 }
 
+void TextureStorage::texture_layer_view_initialize(RID p_texture, RID p_base, int p_layer) {
+	texture_2d_placeholder_initialize(p_texture);
+	WARN_PRINT_ONCE("Texture array layer views are not supported by the Compatibility renderer.");
+}
+
+void TextureStorage::texture_layer_view_update(RID p_view, RID p_base, int p_layer) {
+}
+
 void TextureStorage::texture_drawable_initialize(RID p_texture, int p_width, int p_height, RSE::TextureDrawableFormat p_format, const Color &p_color, bool p_with_mipmaps) {
 	// Behaves identically to Texture_2D_Initialize by generating a white image based on parameters.
 

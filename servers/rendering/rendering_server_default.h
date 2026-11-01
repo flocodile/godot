@@ -216,6 +216,15 @@ public:
 	FUNCRIDTEX6(texture_3d, Image::Format, int, int, int, bool, const Vector<Ref<Image>> &)
 	FUNCRIDTEX3(texture_external, int, int, uint64_t)
 	FUNCRIDTEX1(texture_proxy, RID)
+	virtual RID texture_layer_view_create(RID p_base, int p_layer) override {
+		RID ret = RSG::texture_storage->texture_allocate();
+		if (Thread::get_caller_id() == server_thread) {
+			RSG::texture_storage->texture_layer_view_initialize(ret, p_base, p_layer);
+		} else {
+			command_queue.push(RSG::texture_storage, &RendererTextureStorage::texture_layer_view_initialize, ret, p_base, p_layer);
+		}
+		return ret;
+	}
 	FUNCRIDTEX5(texture_drawable, int, int, RSE::TextureDrawableFormat, const Color &, bool)
 
 	// Called directly, not through the command queue.
@@ -228,6 +237,7 @@ public:
 	FUNC2(texture_3d_update, RID, const Vector<Ref<Image>> &)
 	FUNC4(texture_external_update, RID, int, int, uint64_t)
 	FUNC2(texture_proxy_update, RID, RID)
+	FUNC3(texture_layer_view_update, RID, RID, int)
 
 	FUNC6(texture_drawable_blit_rect, const TypedArray<RID> &, const Rect2i &, RID, const Color &, const TypedArray<RID> &, int)
 

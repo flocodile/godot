@@ -119,7 +119,12 @@ void EditorResourcePicker::_update_resource() {
 			assign_button->set_tooltip_text(resource_path + TTR("Type:") + " " + class_name);
 
 			// Preview will override the above, so called at the end.
-			EditorResourcePreview::get_singleton()->queue_edited_resource_preview(edited_resource, callable_mp(this, &EditorResourcePicker::_update_resource_preview).bind(edited_resource->get_instance_id()));
+			Ref<ArrayTexture> array_texture = edited_resource;
+			if (array_texture.is_valid()) {
+				_update_resource_preview(String(), array_texture, Ref<Texture2D>(), edited_resource->get_instance_id());
+			} else {
+				EditorResourcePreview::get_singleton()->queue_edited_resource_preview(edited_resource, callable_mp(this, &EditorResourcePicker::_update_resource_preview).bind(edited_resource->get_instance_id()));
+			}
 		}
 	} else if (edited_resource.is_valid()) {
 		assign_button->set_tooltip_text(resource_path + TTR("Type:") + " " + edited_resource->get_class());
@@ -876,6 +881,12 @@ void EditorResourcePicker::_ensure_allowed_types() const {
 	}
 
 	allowed_types_with_convert = HashSet<StringName>(allowed_types_without_convert);
+	if (allowed_types_without_convert.has(SNAME("ArrayTexture"))) {
+		allowed_types_with_convert.insert(SNAME("Texture2DArray"));
+		allowed_types_with_convert.insert(SNAME("CompressedTexture2DArray"));
+		allowed_types_with_convert.insert(SNAME("PlaceholderTexture2DArray"));
+		allowed_types_with_convert.insert(SNAME("Texture2DArrayRD"));
+	}
 
 	for (int i = 0; i < size; i++) {
 		const String base = allowed_types[i].strip_edges();
@@ -1007,6 +1018,15 @@ void EditorResourcePicker::drop_data_fw(const Point2 &p_point, const Variant &p_
 		HashSet<StringName> allowed_types(allowed_types_without_convert);
 
 		String res_type = _get_resource_type(dropped_resource);
+
+		Ref<TextureLayered> texture_array = dropped_resource;
+		if (!_is_type_valid(res_type, allowed_types) && allowed_types.has(SNAME("ArrayTexture")) && texture_array.is_valid() && texture_array->get_layered_type() == TextureLayered::LAYERED_TYPE_2D_ARRAY) {
+			Ref<ArrayTexture> array_texture;
+			array_texture.instantiate();
+			array_texture->set_texture_array(texture_array);
+			dropped_resource = array_texture;
+			res_type = array_texture->get_class();
+		}
 
 		// If the accepted dropped resource is from the extended list, it requires conversion.
 		if (!_is_type_valid(res_type, allowed_types)) {

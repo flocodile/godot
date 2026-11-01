@@ -109,10 +109,36 @@ public:
 	virtual int get_height() const;
 	virtual int get_layers() const;
 	virtual bool has_mipmaps() const;
+	virtual int get_mipmap_count() const;
 	virtual Ref<Image> get_layer_data(int p_layer) const;
 };
 
 VARIANT_ENUM_CAST(TextureLayered::LayeredType)
+
+class ArrayTexture : public Texture2D {
+	GDCLASS(ArrayTexture, Texture2D);
+
+	Ref<TextureLayered> texture_array;
+	int layer = 0;
+	mutable RID texture;
+
+protected:
+	static void _bind_methods();
+
+public:
+	void set_texture_array(const Ref<TextureLayered> &p_array);
+	Ref<TextureLayered> get_texture_array() const;
+	void set_layer(int p_layer);
+	int get_layer() const;
+	virtual int get_width() const override;
+	virtual int get_height() const override;
+	virtual Image::Format get_format() const override;
+	virtual bool has_mipmaps() const override;
+	virtual int get_mipmap_count() const override;
+	virtual Ref<Image> get_image() const override;
+	virtual RID get_rid() const override;
+	~ArrayTexture();
+};
 
 class Texture3D : public Texture {
 	GDCLASS(Texture3D, Texture);

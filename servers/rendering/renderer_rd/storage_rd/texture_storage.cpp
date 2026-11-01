@@ -1302,6 +1302,14 @@ void TextureStorage::texture_external_initialize(RID p_texture, int p_width, int
 void TextureStorage::texture_proxy_initialize(RID p_texture, RID p_base) {
 	Texture *tex = texture_owner.get_or_null(p_base);
 	ERR_FAIL_NULL(tex);
+	if (tex->layer_view >= 0) {
+		texture_2d_placeholder_initialize(p_texture);
+		Texture *proxy = texture_owner.get_or_null(p_texture);
+		proxy->cleanup();
+		proxy->is_proxy = true;
+		texture_proxy_update(p_texture, p_base);
+		return;
+	}
 	Texture proxy_tex = *tex;
 
 	proxy_tex.rd_view.format_override = tex->rd_format;
@@ -1318,6 +1326,85 @@ void TextureStorage::texture_proxy_initialize(RID p_texture, RID p_base) {
 	texture_owner.initialize_rid(p_texture, proxy_tex);
 
 	tex->proxies.push_back(p_texture);
+}
+
+void TextureStorage::texture_layer_view_initialize(RID p_texture, RID p_base, int p_layer) {
+	texture_2d_placeholder_initialize(p_texture);
+	texture_layer_view_update(p_texture, p_base, p_layer);
+}
+
+void TextureStorage::texture_layer_view_update(RID p_texture, RID p_base, int p_layer) {
+	Texture *tex = texture_owner.get_or_null(p_texture);
+	ERR_FAIL_NULL(tex);
+	Texture *base = texture_owner.get_or_null(p_base);
+	if (tex->is_proxy && tex->proxy_to.is_valid()) {
+		Texture *old_base = texture_owner.get_or_null(tex->proxy_to);
+		if (old_base) {
+			old_base->proxies.erase(p_texture);
+		}
+	}
+	tex->cleanup();
+	RID placeholder = texture_allocate();
+	texture_2d_placeholder_initialize(placeholder);
+	Texture *placeholder_tex = texture_owner.get_or_null(placeholder);
+	ERR_FAIL_NULL(placeholder_tex);
+	Vector<RID> proxies = tex->proxies;
+	*tex = *placeholder_tex;
+	texture_owner.free(placeholder);
+	tex->proxies = proxies;
+	tex->is_proxy = true;
+	tex->proxy_to = base ? p_base : RID();
+	tex->layer_view = p_layer;
+	tex->layer_view_valid = false;
+	auto update_proxies = [&]() {
+		Vector<RID> dependent_proxies = tex->proxies;
+		for (const RID &proxy : dependent_proxies) {
+			texture_proxy_update(proxy, p_texture);
+		}
+	};
+	if (base) {
+		base->proxies.push_back(p_texture);
+	}
+	if (!base || base->type != TYPE_LAYERED || base->layered_type != RSE::TEXTURE_LAYERED_2D_ARRAY || p_layer < 0 || p_layer >= base->layers) {
+		update_proxies();
+		return;
+	}
+	if (RD::get_singleton()->texture_has_shared_fallback(base->rd_texture)) {
+		ERR_PRINT("Cannot create a zero-copy layer view of a texture using a copy fallback.");
+		update_proxies();
+		return;
+	}
+	RD::TextureView view = base->rd_view;
+	view.format_override = base->rd_format;
+	RID linear = RD::get_singleton()->texture_create_shared_from_slice(view, base->rd_texture, p_layer, 0, base->mipmaps, RD::TEXTURE_SLICE_2D, 0, false);
+	if (linear.is_null()) {
+		update_proxies();
+		return;
+	}
+	RID srgb;
+	if (base->rd_format_srgb != RD::DATA_FORMAT_MAX) {
+		view.format_override = base->rd_format_srgb;
+		srgb = RD::get_singleton()->texture_create_shared_from_slice(view, base->rd_texture, p_layer, 0, base->mipmaps, RD::TEXTURE_SLICE_2D, 0, false);
+		if (srgb.is_null()) {
+			RD::get_singleton()->free_rid(linear);
+			update_proxies();
+			return;
+		}
+	}
+	tex->cleanup();
+	tex->rd_texture = linear;
+	tex->rd_texture_srgb = srgb;
+	tex->rd_type = RD::TEXTURE_TYPE_2D;
+	tex->rd_format = base->rd_format;
+	tex->rd_format_srgb = base->rd_format_srgb;
+	tex->rd_view = view;
+	tex->width = tex->width_2d = base->width;
+	tex->height = tex->height_2d = base->height;
+	tex->mipmaps = base->mipmaps;
+	tex->format = base->format;
+	tex->validated_format = base->validated_format;
+	tex->layer_view_valid = true;
+	update_proxies();
 }
 
 void TextureStorage::texture_drawable_initialize(RID p_texture, int p_width, int p_height, RSE::TextureDrawableFormat p_format, const Color &p_color, bool p_with_mipmaps) {
@@ -1699,10 +1786,14 @@ void TextureStorage::texture_external_update(RID p_texture, int p_width, int p_h
 void TextureStorage::texture_proxy_update(RID p_texture, RID p_proxy_to) {
 	Texture *tex = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL(tex);
+	if (tex->layer_view >= 0) {
+		texture_layer_view_update(p_texture, p_proxy_to, tex->layer_view);
+		return;
+	}
 	ERR_FAIL_COND(!tex->is_proxy);
 	Texture *proxy_to = texture_owner.get_or_null(p_proxy_to);
 	ERR_FAIL_NULL(proxy_to);
-	ERR_FAIL_COND(proxy_to->is_proxy);
+	ERR_FAIL_COND(proxy_to->is_proxy && proxy_to->layer_view < 0);
 
 	if (tex->proxy_to.is_valid()) {
 		//unlink proxy
@@ -1727,15 +1818,25 @@ void TextureStorage::texture_proxy_update(RID p_texture, RID p_proxy_to) {
 	tex->proxy_to = p_proxy_to;
 	tex->is_render_target = false;
 	tex->is_proxy = true;
+	tex->layer_view = -1;
+	tex->layer_view_valid = false;
 	tex->proxies.clear();
 	proxy_to->proxies.push_back(p_texture);
 	tex->canvas_texture = canvas_texture;
 
 	tex->rd_view.format_override = tex->rd_format;
-	tex->rd_texture = RD::get_singleton()->texture_create_shared(tex->rd_view, proxy_to->rd_texture);
+	if (proxy_to->layer_view_valid) {
+		tex->rd_texture = RD::get_singleton()->texture_create_shared_from_slice(tex->rd_view, proxy_to->rd_texture, proxy_to->layer_view, 0, proxy_to->mipmaps, RD::TEXTURE_SLICE_2D, 0, false);
+	} else {
+		tex->rd_texture = RD::get_singleton()->texture_create_shared(tex->rd_view, proxy_to->rd_texture);
+	}
 	if (tex->rd_texture_srgb.is_valid()) {
 		tex->rd_view.format_override = tex->rd_format_srgb;
-		tex->rd_texture_srgb = RD::get_singleton()->texture_create_shared(tex->rd_view, proxy_to->rd_texture);
+		if (proxy_to->layer_view_valid) {
+			tex->rd_texture_srgb = RD::get_singleton()->texture_create_shared_from_slice(tex->rd_view, proxy_to->rd_texture, proxy_to->layer_view, 0, proxy_to->mipmaps, RD::TEXTURE_SLICE_2D, 0, false);
+		} else {
+			tex->rd_texture_srgb = RD::get_singleton()->texture_create_shared(tex->rd_view, proxy_to->rd_texture);
+		}
 	}
 }
 
